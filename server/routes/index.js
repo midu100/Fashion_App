@@ -1,0 +1,24 @@
+const express = require('express')
+const authRoute = require('./auth')
+const productRoute = require('./product')
+const categoryRoute = require('./category')
+const orderRoute = require('./order')
+const newsletterRoute = require('./newsletter')
+const dashboardRoute = require('./dashboard')
+const agentRoute = require('./agent')
+const reviewRoute = require('./review')
+const wishlistRoute = require('./wishlist')
+
+const route = express.Router()
+
+route.use('/auth', authRoute)
+route.use('/product', productRoute)
+route.use('/category', categoryRoute)
+route.use('/order', orderRoute)
+route.use('/newsletter', newsletterRoute)
+route.use('/dashboard', dashboardRoute)
+route.use('/agent', agentRoute)
+route.use('/review', reviewRoute)
+route.use('/wishlist', wishlistRoute)
+
+module.exports = route
