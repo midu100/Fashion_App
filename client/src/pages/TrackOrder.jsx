@@ -99,7 +99,7 @@ const TrackOrder = () => {
 
             <div className="mb-7 overflow-x-auto">
               <div className="min-w-[460px]">
-                <OrderStatusTimeline status={order.status} />
+                <OrderStatusTimeline status={order.status} paymentMethod={order.paymentMethod} />
               </div>
             </div>
 

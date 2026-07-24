@@ -6,8 +6,13 @@ import StatCard from '../../components/admin/StatCard'
 import StatusBadge from '../../components/admin/StatusBadge'
 import Panel from '../../components/admin/Panel'
 
-const STATUS_TABS = ['All', 'pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled']
-const STATUS_OPTIONS = ['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled']
+const STATUS_TABS = ['All', 'pending', 'processing', 'shipped', 'delivered', 'paid', 'cancelled']
+
+// "paid" sits early for online (card) but LAST for cash-on-delivery (cash collected on delivery)
+const statusOptions = (paymentMethod) =>
+  paymentMethod === 'cod'
+    ? ['pending', 'processing', 'shipped', 'delivered', 'paid', 'cancelled']
+    : ['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled']
 
 const money = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}`
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '—')
@@ -119,7 +124,7 @@ const Orders = () => {
                       onChange={(e) => handleStatus(o, e.target.value)}
                       className="bg-dark-card border border-dark-border text-cream text-[12px] font-body rounded-[8px] px-2 py-1.5 outline-none focus:border-primary cursor-pointer capitalize"
                     >
-                      {STATUS_OPTIONS.map((s) => (
+                      {statusOptions(o.paymentMethod).map((s) => (
                         <option key={s} value={s} className="bg-dark-card capitalize">{s}</option>
                       ))}
                     </select>

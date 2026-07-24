@@ -1,16 +1,22 @@
 import React from 'react'
 import { FiClock, FiCreditCard, FiPackage, FiTruck, FiCheckCircle, FiXCircle } from 'react-icons/fi'
 
-// ====== Order status stepper (pending → paid → processing → shipped → delivered) ======
-const STEPS = [
-  { key: 'pending', label: 'Placed', icon: FiClock },
-  { key: 'paid', label: 'Paid', icon: FiCreditCard },
-  { key: 'processing', label: 'Processing', icon: FiPackage },
-  { key: 'shipped', label: 'Shipped', icon: FiTruck },
-  { key: 'delivered', label: 'Delivered', icon: FiCheckCircle },
-]
+// ====== Order status stepper — the "paid" step position depends on payment method ======
+// Online (card): pending → paid → processing → shipped → delivered
+// Cash on delivery: pending → processing → shipped → delivered → paid (cash collected last)
+const buildSteps = (paymentMethod) => {
+  const pending = { key: 'pending', label: 'Placed', icon: FiClock }
+  const paid = { key: 'paid', label: paymentMethod === 'cod' ? 'Cash Paid' : 'Paid', icon: FiCreditCard }
+  const processing = { key: 'processing', label: 'Processing', icon: FiPackage }
+  const shipped = { key: 'shipped', label: 'Shipped', icon: FiTruck }
+  const delivered = { key: 'delivered', label: 'Delivered', icon: FiCheckCircle }
 
-const OrderStatusTimeline = ({ status }) => {
+  return paymentMethod === 'cod'
+    ? [pending, processing, shipped, delivered, paid]
+    : [pending, paid, processing, shipped, delivered]
+}
+
+const OrderStatusTimeline = ({ status, paymentMethod = 'card' }) => {
   // Cancelled — terminal state, show its own banner
   if (status === 'cancelled') {
     return (
@@ -24,6 +30,7 @@ const OrderStatusTimeline = ({ status }) => {
     )
   }
 
+  const STEPS = buildSteps(paymentMethod)
   const current = Math.max(0, STEPS.findIndex((s) => s.key === status))
 
   return (

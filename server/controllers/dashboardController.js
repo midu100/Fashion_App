@@ -23,23 +23,35 @@ const getOverview = async (req, res) => {
     const totalCustomers = await userSchema.countDocuments({ role: 'user' })
 
     // ---- Orders
-    // Revenue/profit are recognised only on REALISED sales (delivered).
-    // Everything in-flight (pending/paid/processing/shipped) sits in pendingRevenue.
-    const REALIZED = ['delivered']
-    const PENDING = ['pending', 'paid', 'processing', 'shipped']
+    // Revenue is realised when the money is actually in hand:
+    //  · card (online) → captured at "paid" and stays realised through delivery
+    //  · cod           → cash collected only at the final "paid" step
+    // Anything before that is pendingRevenue. Cancelled is excluded from both.
+    const REALIZED_MATCH = {
+      $or: [
+        { paymentMethod: 'card', status: { $in: ['paid', 'processing', 'shipped', 'delivered'] } },
+        { paymentMethod: 'cod', status: 'paid' },
+      ],
+    }
+    const PENDING_MATCH = {
+      $or: [
+        { paymentMethod: 'card', status: 'pending' },
+        { paymentMethod: 'cod', status: { $in: ['pending', 'processing', 'shipped', 'delivered'] } },
+      ],
+    }
 
     const totalOrders = await orderSchema.countDocuments({})
-    const deliveredCount = await orderSchema.countDocuments({ status: { $in: REALIZED } })
+    const deliveredCount = await orderSchema.countDocuments(REALIZED_MATCH)
 
     const revenueAgg = await orderSchema.aggregate([
-      { $match: { status: { $in: REALIZED } } },
+      { $match: REALIZED_MATCH },
       { $group: { _id: null, revenue: { $sum: '$total' } } },
     ])
     const totalRevenue = revenueAgg[0]?.revenue || 0
     const avgOrderValue = deliveredCount > 0 ? totalRevenue / deliveredCount : 0
 
     const pendingAgg = await orderSchema.aggregate([
-      { $match: { status: { $in: PENDING } } },
+      { $match: PENDING_MATCH },
       { $group: { _id: null, revenue: { $sum: '$total' }, count: { $sum: 1 } } },
     ])
     const pendingRevenue = pendingAgg[0]?.revenue || 0
@@ -47,7 +59,7 @@ const getOverview = async (req, res) => {
 
     // ---- Profit / loss (sold price − buy price) — REALISED sales only
     const profitAgg = await orderSchema.aggregate([
-      { $match: { status: { $in: REALIZED } } },
+      { $match: REALIZED_MATCH },
       { $unwind: '$items' },
       {
         $lookup: {
@@ -84,7 +96,7 @@ const getOverview = async (req, res) => {
 
     // ---- Top selling (from realised sales)
     const topSelling = await orderSchema.aggregate([
-      { $match: { status: { $in: REALIZED } } },
+      { $match: REALIZED_MATCH },
       { $unwind: '$items' },
       {
         $group: {

@@ -68,7 +68,7 @@ const MyOrders = () => {
                 {/* Timeline */}
                 <div className="mb-7 overflow-x-auto">
                   <div className="min-w-[460px]">
-                    <OrderStatusTimeline status={o.status} />
+                    <OrderStatusTimeline status={o.status} paymentMethod={o.paymentMethod} />
                   </div>
                 </div>
 
