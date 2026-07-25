@@ -10,8 +10,23 @@ const { startDigestCron } = require('./jobs/digestCron')
 const app = express()
 const port = process.env.PORT || 8000
 
-// ====== Middleware
-app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }))
+// ====== CORS — allow-list (CLIENT_URL may hold several comma-separated origins)
+// e.g. CLIENT_URL="https://fashion-app-rouge.vercel.app,http://localhost:5173"
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map((o) => o.trim().replace(/\/$/, '')) // strip trailing slash
+  .filter(Boolean)
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // allow non-browser tools (no origin) and any allow-listed origin
+      if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ''))) return callback(null, true)
+      return callback(new Error(`Origin ${origin} not allowed by CORS`))
+    },
+    credentials: true,
+  })
+)
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser())

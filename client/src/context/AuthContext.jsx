@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { authServices } from '../api'
-import { getCookie, deleteCookie } from '../components/common/Services'
+import { getCookie, deleteCookie, getToken, clearToken } from '../components/common/Services'
 
 // ====== Auth Context (store-less; restores session from the X_AS-TOKEN cookie) ======
 const AuthContext = createContext(null)
@@ -12,7 +12,7 @@ export const AuthProvider = ({ children }) => {
   // ====== Restore the session on first load (only if a token cookie exists)
   useEffect(() => {
     const restore = async () => {
-      if (!getCookie('X_AS-TOKEN')) {
+      if (!getToken() && !getCookie('X_AS-TOKEN')) {
         setLoading(false)
         return
       }
@@ -42,6 +42,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.log(error)
     }
+    clearToken()
     deleteCookie('X_AS-TOKEN')
     deleteCookie('R_FS-TOKEN')
     setUser(null)

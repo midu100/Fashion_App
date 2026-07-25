@@ -114,9 +114,14 @@ const signIn = async (req, res) => {
     const accToken = generateAccToken(existUser)
     const refToken = generateRefreshToken(existUser)
 
-    res.cookie('X_AS-TOKEN', accToken)
-    res.cookie('R_FS-TOKEN', refToken)
-    res.status(200).send({ message: 'Login Successful.', role: existUser.role })
+    // Cross-site cookies need SameSite=None + Secure (Railway serves HTTPS).
+    // The token is ALSO returned so the SPA can send it via Authorization header
+    // (robust even if the browser blocks third-party cookies).
+    const isProd = process.env.NODE_ENV === 'production'
+    const cookieOpts = { httpOnly: false, secure: isProd, sameSite: isProd ? 'none' : 'lax' }
+    res.cookie('X_AS-TOKEN', accToken, cookieOpts)
+    res.cookie('R_FS-TOKEN', refToken, cookieOpts)
+    res.status(200).send({ message: 'Login Successful.', role: existUser.role, token: accToken })
   } catch (error) {
     console.log(error)
   }

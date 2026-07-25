@@ -6,6 +6,7 @@ import AuthFormInput from '../components/auth/AuthFormInput'
 import AuthButton from '../components/auth/AuthButton'
 import AuthSocialSection from '../components/auth/AuthSocialSection'
 import { authServices } from '../api'
+import { setToken } from '../components/common/Services'
 import { useAuth } from '../context/AuthContext'
 
 const slides = [
@@ -45,6 +46,7 @@ const SignIn = () => {
     try {
       setLoading(true)
       const res = await authServices.signIn(formData)
+      if (res?.token) setToken(res.token) // store for cross-host Authorization header
       const profile = await authServices.getProfile()
       const user = profile?.user || null
       login(user)

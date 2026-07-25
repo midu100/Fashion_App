@@ -1,18 +1,19 @@
 import axios from 'axios'
-import { getCookie } from '../components/common/Services'
+import { getCookie, getToken } from '../components/common/Services'
 
 // ====== Axios instance ======
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
-  withCredentials: true, // critical — sends the X_AS-TOKEN cookie the backend reads
+  withCredentials: true, // sends the cookie too (same-site setups)
   headers: { 'Content-Type': 'application/json' },
 })
 
-// ====== Attach token (fallback header; backend reads the cookie) ======
+// ====== Attach token ======
+// Prefer the localStorage token (works cross-host); fall back to the cookie.
 api.interceptors.request.use(
   (config) => {
-    const token = getCookie('X_AS-TOKEN')
-    if (token) config.headers.Authorization = `${token}`
+    const token = getToken() || getCookie('X_AS-TOKEN')
+    if (token) config.headers.Authorization = `Bearer ${token}`
     return config
   },
   (error) => Promise.reject(error)
