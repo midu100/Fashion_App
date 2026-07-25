@@ -29,6 +29,8 @@ const orderSchema = new mongoose.Schema(
     paymentMethod: { type: String, enum: ['card', 'cod'], default: 'card' },
     subtotal: { type: Number, default: 0 },
     shipping: { type: Number, default: 0 },
+    discount: { type: Number, default: 0 },
+    couponCode: { type: String, default: null },
     total: { type: Number, default: 0 },
     status: {
       type: String,

@@ -5,6 +5,7 @@ const cookieParser = require('cookie-parser')
 const dbConfig = require('./dbConfig')
 const cloudinaryConfig = require('./utils/cloudinaryConfig')
 const route = require('./routes')
+const { startDigestCron } = require('./jobs/digestCron')
 
 const app = express()
 const port = process.env.PORT || 8000
@@ -22,6 +23,9 @@ cloudinaryConfig()
 // ====== Routes
 app.use(route)
 app.get('/', (req, res) => res.status(200).send({ message: 'KAZIR NATION API is running 🚀' }))
+
+// ====== Scheduled jobs (AI business digest)
+startDigestCron()
 
 // ====== Server
 app.listen(port, () => {

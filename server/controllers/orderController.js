@@ -1,5 +1,7 @@
 const orderSchema = require('../models/orderSchema')
 const productSchema = require('../models/productSchema')
+const couponSchema = require('../models/couponSchema')
+const { evaluateCoupon } = require('./couponController')
 const { sendEmail } = require('../utils/emailServices')
 const { orderConfirmTemp } = require('../utils/templates')
 
@@ -9,7 +11,7 @@ const SHIPPING_FEE = 25
 // ====== Place Order (guest ok) — validates stock, recomputes totals, decrements stock
 const placeOrder = async (req, res) => {
   try {
-    const { items, shippingAddress, paymentMethod } = req.body
+    const { items, shippingAddress, paymentMethod, couponCode } = req.body
 
     if (!Array.isArray(items) || items.length === 0)
       return res.status(400).send({ message: 'Your cart is empty' })
@@ -54,8 +56,20 @@ const placeOrder = async (req, res) => {
       stockOps.push({ productId: dbProduct._id, sku: variant.sku, qty })
     }
 
-    const shipping = subtotal >= SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE
-    const total = subtotal + shipping
+    let shipping = subtotal >= SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE
+
+    // ---- Coupon (re-validated server-side; never trust the client's amount)
+    let discount = 0
+    let appliedCode = null
+    if (couponCode) {
+      const result = await evaluateCoupon(couponCode, subtotal)
+      if (!result.valid) return res.status(400).send({ message: result.message })
+      discount = result.discount
+      appliedCode = result.coupon.code
+      if (result.freeShipping) shipping = 0
+    }
+
+    const total = Math.max(0, subtotal - discount + shipping)
     const orderNumber = 'KN-' + Date.now().toString().slice(-8)
 
     const order = await orderSchema.create({
@@ -66,9 +80,14 @@ const placeOrder = async (req, res) => {
       paymentMethod: paymentMethod || 'card',
       subtotal,
       shipping,
+      discount,
+      couponCode: appliedCode,
       total,
       status: 'pending',
     })
+
+    // Count coupon usage once the order is created
+    if (appliedCode) await couponSchema.updateOne({ code: appliedCode }, { $inc: { usedCount: 1 } })
 
     // Reserve stock — decrement the exact variant sold
     for (const op of stockOps) {

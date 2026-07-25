@@ -8,6 +8,7 @@ const dashboardRoute = require('./dashboard')
 const agentRoute = require('./agent')
 const reviewRoute = require('./review')
 const wishlistRoute = require('./wishlist')
+const couponRoute = require('./coupon')
 
 const route = express.Router()
 
@@ -20,5 +21,6 @@ route.use('/dashboard', dashboardRoute)
 route.use('/agent', agentRoute)
 route.use('/review', reviewRoute)
 route.use('/wishlist', wishlistRoute)
+route.use('/coupon', couponRoute)
 
 module.exports = route

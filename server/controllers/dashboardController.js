@@ -1,125 +1,52 @@
 const orderSchema = require('../models/orderSchema')
-const productSchema = require('../models/productSchema')
 const userSchema = require('../models/userSchema')
+const productSchema = require('../models/productSchema')
+const subscriberSchema = require('../models/subscriberSchema')
+const settingsSchema = require('../models/settingsSchema')
+const analytics = require('../utils/analytics')
 
-const LOW_STOCK_THRESHOLD = 10
-
-// ====== Dashboard overview (admin) — live aggregates from the DB
+// ====== Dashboard overview (admin) — composed from the shared analytics core
 const getOverview = async (req, res) => {
   try {
-    // ---- Products / inventory (stock lives per-variant → sum it)
-    const totalProducts = await productSchema.countDocuments({})
-    const stockAgg = await productSchema.aggregate([{ $project: { totalStock: { $sum: '$variants.stock' } } }])
-    let inStock = 0
-    let lowStock = 0
-    let outOfStock = 0
-    for (const p of stockAgg) {
-      if (p.totalStock <= 0) outOfStock++
-      else if (p.totalStock <= LOW_STOCK_THRESHOLD) lowStock++
-      else inStock++
-    }
-
-    // ---- Customers
-    const totalCustomers = await userSchema.countDocuments({ role: 'user' })
-
-    // ---- Orders
-    // Revenue is realised when the money is actually in hand:
-    //  · card (online) → captured at "paid" and stays realised through delivery
-    //  · cod           → cash collected only at the final "paid" step
-    // Anything before that is pendingRevenue. Cancelled is excluded from both.
-    const REALIZED_MATCH = {
-      $or: [
-        { paymentMethod: 'card', status: { $in: ['paid', 'processing', 'shipped', 'delivered'] } },
-        { paymentMethod: 'cod', status: 'paid' },
-      ],
-    }
-    const PENDING_MATCH = {
-      $or: [
-        { paymentMethod: 'card', status: 'pending' },
-        { paymentMethod: 'cod', status: { $in: ['pending', 'processing', 'shipped', 'delivered'] } },
-      ],
-    }
-
-    const totalOrders = await orderSchema.countDocuments({})
-    const deliveredCount = await orderSchema.countDocuments(REALIZED_MATCH)
-
-    const revenueAgg = await orderSchema.aggregate([
-      { $match: REALIZED_MATCH },
-      { $group: { _id: null, revenue: { $sum: '$total' } } },
-    ])
-    const totalRevenue = revenueAgg[0]?.revenue || 0
-    const avgOrderValue = deliveredCount > 0 ? totalRevenue / deliveredCount : 0
-
-    const pendingAgg = await orderSchema.aggregate([
-      { $match: PENDING_MATCH },
-      { $group: { _id: null, revenue: { $sum: '$total' }, count: { $sum: 1 } } },
-    ])
-    const pendingRevenue = pendingAgg[0]?.revenue || 0
-    const pendingOrders = pendingAgg[0]?.count || 0
-
-    // ---- Profit / loss (sold price − buy price) — REALISED sales only
-    const profitAgg = await orderSchema.aggregate([
-      { $match: REALIZED_MATCH },
-      { $unwind: '$items' },
-      {
-        $lookup: {
-          from: 'products',
-          localField: 'items.product',
-          foreignField: '_id',
-          as: 'product',
-        },
-      },
-      { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
-      {
-        $group: {
-          _id: null,
-          soldRevenue: { $sum: { $multiply: ['$items.price', '$items.qty'] } },
-          soldCost: { $sum: { $multiply: [{ $ifNull: ['$product.buyPrice', 0] }, '$items.qty'] } },
-        },
-      },
-    ])
-    const soldRevenue = profitAgg[0]?.soldRevenue || 0
-    const soldCost = profitAgg[0]?.soldCost || 0
-    const totalProfit = soldRevenue - soldCost
-
-    // ---- Inventory capital tied up in stock (stock × buyPrice)
-    const capitalAgg = await productSchema.aggregate([
-      { $unwind: { path: '$variants', preserveNullAndEmptyArrays: true } },
-      { $group: { _id: null, capital: { $sum: { $multiply: [{ $ifNull: ['$buyPrice', 0] }, { $ifNull: ['$variants.stock', 0] }] } } } },
-    ])
-    const inventoryCapital = capitalAgg[0]?.capital || 0
-
-    const statusAgg = await orderSchema.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }])
-    const ordersByStatus = statusAgg.reduce((acc, s) => ({ ...acc, [s._id]: s.count }), {})
-
-    const recentOrders = await orderSchema.find().sort({ createdAt: -1 }).limit(5)
-
-    // ---- Top selling (from realised sales)
-    const topSelling = await orderSchema.aggregate([
-      { $match: REALIZED_MATCH },
-      { $unwind: '$items' },
-      {
-        $group: {
-          _id: '$items.product',
-          name: { $first: '$items.name' },
-          image: { $first: '$items.image' },
-          sold: { $sum: '$items.qty' },
-          revenue: { $sum: { $multiply: ['$items.price', '$items.qty'] } },
-        },
-      },
-      { $sort: { sold: -1 } },
-      { $limit: 5 },
+    const [sales, pl, inv, orderStats, custom, topProducts, recentOrders, totalOrders] = await Promise.all([
+      analytics.getSalesSummary({}),
+      analytics.getProfitAndLoss({}),
+      analytics.getInventoryStatus(),
+      analytics.getOrderStats({}),
+      analytics.getCustomerStats(),
+      analytics.getTopProducts({ limit: 5 }),
+      orderSchema.find().sort({ createdAt: -1 }).limit(5),
+      orderSchema.countDocuments({}),
     ])
 
     res.status(200).send({
       message: 'Success',
       overview: {
-        kpis: { totalRevenue, totalOrders, avgOrderValue, totalCustomers, deliveredCount, pendingOrders },
-        finance: { soldRevenue, soldCost, totalProfit, inventoryCapital, pendingRevenue, pendingOrders },
-        inventory: { totalProducts, inStock, lowStock, outOfStock },
-        ordersByStatus,
+        kpis: {
+          totalRevenue: sales.realizedRevenue,
+          totalOrders,
+          avgOrderValue: sales.avgOrderValue,
+          totalCustomers: custom.stats.totalCustomers,
+          deliveredCount: sales.orders,
+          pendingOrders: sales.pendingOrders,
+        },
+        finance: {
+          soldRevenue: pl.soldRevenue,
+          soldCost: pl.soldCost,
+          totalProfit: pl.grossProfit,
+          inventoryCapital: inv.inventoryCapital,
+          pendingRevenue: sales.pendingRevenue,
+          pendingOrders: sales.pendingOrders,
+        },
+        inventory: {
+          totalProducts: inv.totalProducts,
+          inStock: inv.inStock,
+          lowStock: inv.lowStock,
+          outOfStock: inv.outOfStock,
+        },
+        ordersByStatus: orderStats.ordersByStatus,
         recentOrders,
-        topSelling,
+        topSelling: topProducts.map((p) => ({ _id: p.productId, name: p.name, image: p.image, sold: p.sold, revenue: p.revenue })),
       },
     })
   } catch (error) {
@@ -128,7 +55,7 @@ const getOverview = async (req, res) => {
   }
 }
 
-// ====== Analytics (admin) — time series + category breakdown for charts
+// ====== Analytics (admin) — 14-day revenue series + category breakdown (realised only)
 const getAnalytics = async (req, res) => {
   try {
     const DAYS = 14
@@ -137,9 +64,9 @@ const getAnalytics = async (req, res) => {
     start.setDate(start.getDate() - (DAYS - 1))
     start.setHours(0, 0, 0, 0)
 
-    // ---- Revenue per day (zero-filled window)
+    // Realised revenue per day (zero-filled window) — payment-aware, consistent with KPIs
     const revAgg = await orderSchema.aggregate([
-      { $match: { createdAt: { $gte: start } } },
+      { $match: { $and: [analytics.REALIZED_MATCH, { createdAt: { $gte: start } }] } },
       { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, revenue: { $sum: '$total' }, orders: { $sum: 1 } } },
     ])
     const revMap = revAgg.reduce((acc, r) => ({ ...acc, [r._id]: r }), {})
@@ -156,8 +83,9 @@ const getAnalytics = async (req, res) => {
       ordersSeries.push(revMap[key]?.orders || 0)
     }
 
-    // ---- Sales by category (from sold line items)
+    // Sales by category — realised only
     const salesByCategory = await orderSchema.aggregate([
+      { $match: analytics.REALIZED_MATCH },
       { $unwind: '$items' },
       { $lookup: { from: 'products', localField: 'items.product', foreignField: '_id', as: 'product' } },
       { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
@@ -167,54 +95,55 @@ const getAnalytics = async (req, res) => {
       { $sort: { value: -1 } },
     ])
 
-    res.status(200).send({
-      message: 'Success',
-      analytics: {
-        revenue: { labels, revenueSeries, ordersSeries },
-        salesByCategory,
-      },
-    })
+    res.status(200).send({ message: 'Success', analytics: { revenue: { labels, revenueSeries, ordersSeries }, salesByCategory } })
   } catch (error) {
     console.log(error)
     res.status(500).send({ message: 'Internal server error' })
   }
 }
 
-// ====== Customers (admin) — users + order count + total spent
+// ====== Customers (admin) — delegated to the analytics core
 const getCustomers = async (req, res) => {
   try {
-    const customers = await userSchema.aggregate([
-      { $match: { role: 'user' } },
-      {
-        $lookup: {
-          from: 'orders',
-          localField: '_id',
-          foreignField: 'user',
-          as: 'orders',
-        },
-      },
-      {
-        $project: {
-          fullName: 1,
-          email: 1,
-          avatar: 1,
-          createdAt: 1,
-          isVerified: 1,
-          orders: { $size: '$orders' },
-          spent: { $sum: '$orders.total' },
-        },
-      },
-      { $sort: { spent: -1 } },
+    const { customers, stats } = await analytics.getCustomerStats()
+    res.status(200).send({ message: 'Success', customers, stats })
+  } catch (error) {
+    console.log(error)
+    res.status(500).send({ message: 'Internal server error' })
+  }
+}
+
+// ====== Marketing (admin) — subscribers, most-wishlisted, new customers
+const getMarketing = async (req, res) => {
+  try {
+    const since = new Date()
+    since.setDate(since.getDate() - 30)
+
+    const [totalSubscribers, recentSubscribers, newCustomers, totalCustomers] = await Promise.all([
+      subscriberSchema.countDocuments({}),
+      subscriberSchema.find().sort({ createdAt: -1 }).limit(10),
+      userSchema.countDocuments({ role: 'user', createdAt: { $gte: since } }),
+      userSchema.countDocuments({ role: 'user' }),
     ])
 
-    const totalCustomers = customers.length
-    const totalSpent = customers.reduce((s, c) => s + (c.spent || 0), 0)
-    const avgLtv = totalCustomers ? totalSpent / totalCustomers : 0
+    // Most-wishlisted products (from users' wishlist arrays)
+    const mostWishlisted = await userSchema.aggregate([
+      { $unwind: '$wishlist' },
+      { $group: { _id: '$wishlist', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 8 },
+      { $lookup: { from: 'products', localField: '_id', foreignField: '_id', as: 'product' } },
+      { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
+      { $project: { _id: 0, productId: '$_id', name: '$product.title', thumbnail: '$product.thumbnail', wishlistedBy: '$count' } },
+    ])
 
     res.status(200).send({
       message: 'Success',
-      customers,
-      stats: { totalCustomers, avgLtv, activeBuyers: customers.filter((c) => c.orders > 0).length },
+      marketing: {
+        stats: { totalSubscribers, newCustomers, totalCustomers, wishlistItems: mostWishlisted.length },
+        recentSubscribers,
+        mostWishlisted,
+      },
     })
   } catch (error) {
     console.log(error)
@@ -222,4 +151,80 @@ const getCustomers = async (req, res) => {
   }
 }
 
-module.exports = { getOverview, getAnalytics, getCustomers }
+// ====== Reports (admin) — generic { columns, rows } for CSV export
+const getReport = async (req, res) => {
+  try {
+    const { type } = req.params
+    let columns = []
+    let rows = []
+
+    if (type === 'sales') {
+      const orders = await orderSchema.aggregate([{ $match: analytics.REALIZED_MATCH }, { $sort: { createdAt: -1 } }])
+      columns = ['Order', 'Date', 'Customer', 'Items', 'Total', 'Status']
+      rows = orders.map((o) => [o.orderNumber, new Date(o.createdAt).toISOString().slice(0, 10), o.shippingAddress?.firstName || 'Guest', o.items?.length || 0, o.total, o.status])
+    } else if (type === 'inventory') {
+      const products = await productSchema.aggregate([
+        { $addFields: { totalStock: { $sum: '$variants.stock' } } },
+        { $lookup: { from: 'categories', localField: 'category', foreignField: '_id', as: 'cat' } },
+        { $unwind: { path: '$cat', preserveNullAndEmptyArrays: true } },
+      ])
+      columns = ['Product', 'Category', 'Stock', 'Sell Price', 'Buy Price', 'Active']
+      rows = products.map((p) => [p.title, p.cat?.name || '—', p.totalStock, p.price, p.buyPrice || 0, p.isActive ? 'Yes' : 'No'])
+    } else if (type === 'customers') {
+      const { customers } = await analytics.getCustomerStats()
+      columns = ['Name', 'Email', 'Orders', 'Total Spent', 'Joined']
+      rows = customers.map((c) => [c.fullName || '', c.email, c.orders, c.spent || 0, new Date(c.createdAt).toISOString().slice(0, 10)])
+    } else if (type === 'financial') {
+      const pl = await analytics.getProfitAndLoss({})
+      const sales = await analytics.getSalesSummary({})
+      const inv = await analytics.getInventoryStatus()
+      columns = ['Metric', 'Value']
+      rows = [
+        ['Realised Revenue', sales.realizedRevenue],
+        ['Cost of Goods', pl.soldCost],
+        ['Gross Profit', pl.grossProfit],
+        ['Margin %', pl.marginPct],
+        ['Pending Revenue', sales.pendingRevenue],
+        ['Inventory Capital', inv.inventoryCapital],
+      ]
+    } else if (type === 'products') {
+      const rowsData = await analytics.getProfitByProduct({ limit: 500 })
+      columns = ['Product', 'Units', 'Revenue', 'Cost', 'Profit', 'Margin %']
+      rows = rowsData.map((p) => [p.name, p.units, p.revenue, p.cost, p.profit, p.marginPct])
+    } else {
+      return res.status(400).send({ message: 'Unknown report type' })
+    }
+
+    res.status(200).send({ message: 'Success', report: { type, columns, rows, generatedAt: new Date().toISOString() } })
+  } catch (error) {
+    console.log(error)
+    res.status(500).send({ message: 'Internal server error' })
+  }
+}
+
+// ====== Store settings (admin) — singleton get/update
+const getSettings = async (req, res) => {
+  try {
+    let settings = await settingsSchema.findOne()
+    if (!settings) settings = await settingsSchema.create({})
+    res.status(200).send({ message: 'Success', settings })
+  } catch (error) {
+    console.log(error)
+    res.status(500).send({ message: 'Internal server error' })
+  }
+}
+
+const updateSettings = async (req, res) => {
+  try {
+    const allowed = ['storeName', 'supportEmail', 'currency', 'country', 'lowStockThreshold', 'freeShippingThreshold', 'shippingFee']
+    const update = {}
+    for (const k of allowed) if (req.body[k] !== undefined) update[k] = req.body[k]
+    const settings = await settingsSchema.findOneAndUpdate({}, update, { new: true, upsert: true })
+    res.status(200).send({ message: 'Settings saved', settings })
+  } catch (error) {
+    console.log(error)
+    res.status(500).send({ message: 'Internal server error' })
+  }
+}
+
+module.exports = { getOverview, getAnalytics, getCustomers, getMarketing, getReport, getSettings, updateSettings }

@@ -1,71 +1,80 @@
-import React from 'react'
-import { FiPlus, FiMail, FiZap, FiBell, FiMessageCircle } from 'react-icons/fi'
-import { marketingKpis, campaigns } from '../../data/adminData'
+import React, { useState, useEffect } from 'react'
+import { FiHeart } from 'react-icons/fi'
+import toast from 'react-hot-toast'
+import { dashboardServices } from '../../api'
 import PageHeader from '../../components/admin/PageHeader'
 import StatCard from '../../components/admin/StatCard'
-import StatusBadge from '../../components/admin/StatusBadge'
 import Panel from '../../components/admin/Panel'
 
-const channelIcon = {
-  Email: <FiMail size={15} />,
-  Automation: <FiZap size={15} />,
-  Push: <FiBell size={15} />,
-  SMS: <FiMessageCircle size={15} />,
-}
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—')
 
 const Marketing = () => {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    dashboardServices
+      .getMarketing()
+      .then((res) => setData(res?.marketing || null))
+      .catch((err) => { console.log(err); toast.error('Failed to load marketing') })
+      .finally(() => setLoading(false))
+  }, [])
+
+  const s = data?.stats || {}
+  const kpis = [
+    { key: 'subs', label: 'Newsletter Subscribers', value: String(s.totalSubscribers ?? 0), icon: 'send', sub: 'total list' },
+    { key: 'new', label: 'New Customers (30d)', value: String(s.newCustomers ?? 0), icon: 'users', sub: 'last 30 days' },
+    { key: 'total', label: 'Total Customers', value: String(s.totalCustomers ?? 0), icon: 'users', sub: 'registered' },
+  ]
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Marketing"
-        subtitle="Campaigns, automations and audience."
-        action={
-          <button className="inline-flex items-center gap-2 bg-primary text-dark text-[12px] font-ui tracking-[0.15em] font-semibold px-5 py-3 rounded-[10px] hover:bg-primary-light transition-colors cursor-pointer active:scale-95">
-            <FiPlus size={16} />
-            New Campaign
-          </button>
-        }
-      />
+      <PageHeader title="Marketing" subtitle="Audience, subscribers and demand signals." />
+
+      {loading && <p className="text-[13px] font-ui tracking-[0.2em] text-cream-muted uppercase animate-pulse">Loading…</p>}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        {marketingKpis.map((s, i) => (
-          <StatCard key={s.key} stat={s} index={i} />
+        {kpis.map((k, i) => (
+          <StatCard key={k.key} stat={k} index={i} />
         ))}
       </div>
 
-      <Panel title="Campaigns">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[680px]">
-            <thead>
-              <tr className="text-left text-[11px] font-ui tracking-wide text-cream-muted/70 border-b border-dark-border">
-                <th className="px-3 py-3 font-medium">Campaign</th>
-                <th className="px-3 py-3 font-medium">Channel</th>
-                <th className="px-3 py-3 font-medium">Sent</th>
-                <th className="px-3 py-3 font-medium">Open Rate</th>
-                <th className="px-3 py-3 font-medium">CTR</th>
-                <th className="px-3 py-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {campaigns.map((c) => (
-                <tr key={c.name} className="border-b border-dark-border/60 last:border-0 text-[13px] hover:bg-dark-card/40 transition-colors">
-                  <td className="px-3 py-3.5 font-ui text-cream">{c.name}</td>
-                  <td className="px-3 py-3.5">
-                    <span className="inline-flex items-center gap-2 font-body text-cream-muted">
-                      <span className="text-primary">{channelIcon[c.channel]}</span>
-                      {c.channel}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3.5 font-body text-cream-muted">{c.sent ? c.sent.toLocaleString() : '—'}</td>
-                  <td className="px-3 py-3.5 font-body text-cream-muted">{c.opened}</td>
-                  <td className="px-3 py-3.5 font-body text-cream-muted">{c.ctr}</td>
-                  <td className="px-3 py-3.5"><StatusBadge status={c.status} /></td>
-                </tr>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Most wishlisted — real demand signal */}
+        <Panel title="Most Wishlisted" subtitle="What customers want most">
+          {!data?.mostWishlisted?.length ? (
+            <p className="text-[13px] font-body text-cream-muted py-8 text-center">No wishlist data yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {data.mostWishlisted.map((p) => (
+                <div key={p.productId} className="flex items-center gap-3">
+                  <img src={p.thumbnail} alt={p.name} className="w-11 h-11 rounded-[10px] object-cover border border-dark-border shrink-0" />
+                  <span className="flex-1 text-[13px] font-ui text-cream truncate">{p.name || 'Product'}</span>
+                  <span className="inline-flex items-center gap-1.5 text-[12px] font-body text-primary">
+                    <FiHeart size={13} className="fill-current" /> {p.wishlistedBy}
+                  </span>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
+            </div>
+          )}
+        </Panel>
+
+        {/* Recent subscribers */}
+        <Panel title="Recent Subscribers">
+          {!data?.recentSubscribers?.length ? (
+            <p className="text-[13px] font-body text-cream-muted py-8 text-center">No subscribers yet.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {data.recentSubscribers.map((sub) => (
+                <div key={sub._id} className="flex items-center justify-between bg-dark-card border border-dark-border rounded-[10px] px-3 py-2.5">
+                  <span className="text-[13px] font-body text-cream truncate">{sub.email}</span>
+                  <span className="text-[11px] font-body text-cream-muted shrink-0">{fmtDate(sub.createdAt)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
     </div>
   )
 }

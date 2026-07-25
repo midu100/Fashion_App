@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { FiLock, FiCheck, FiArrowLeft, FiCreditCard, FiTruck } from 'react-icons/fi'
 import toast from 'react-hot-toast'
 import { useCart } from '../context/CartContext'
-import { orderServices } from '../api'
+import { orderServices, couponServices } from '../api'
 import { formatPrice } from '../data/products'
 
 const SHIPPING_THRESHOLD = 300
@@ -27,8 +27,34 @@ const Checkout = () => {
   const [placed, setPlaced] = useState(false)
   const [orderNumber, setOrderNumber] = useState('')
 
-  const shipping = subtotal >= SHIPPING_THRESHOLD || subtotal === 0 ? 0 : 25
-  const total = subtotal + shipping
+  // ====== Coupon
+  const [couponInput, setCouponInput] = useState('')
+  const [coupon, setCoupon] = useState(null) // { code, discount, freeShipping, type, value }
+  const [couponMsg, setCouponMsg] = useState('')
+  const [applying, setApplying] = useState(false)
+
+  const baseShipping = subtotal >= SHIPPING_THRESHOLD || subtotal === 0 ? 0 : 25
+  const shipping = coupon?.freeShipping ? 0 : baseShipping
+  const discount = coupon?.discount || 0
+  const total = Math.max(0, subtotal - discount + shipping)
+
+  // ====== Apply / remove coupon
+  const applyCoupon = async () => {
+    if (!couponInput.trim()) return
+    try {
+      setApplying(true)
+      setCouponMsg('')
+      const res = await couponServices.validate({ code: couponInput.trim(), subtotal })
+      setCoupon({ code: res.code, discount: res.discount, freeShipping: res.freeShipping, type: res.type, value: res.value })
+      setCouponMsg(res.message || 'Coupon applied')
+    } catch (err) {
+      setCoupon(null)
+      setCouponMsg(err?.response?.data?.message || 'Invalid coupon')
+    } finally {
+      setApplying(false)
+    }
+  }
+  const removeCoupon = () => { setCoupon(null); setCouponInput(''); setCouponMsg('') }
 
   // ====== Controlled input helper
   const handleChange = (e) => {
@@ -57,6 +83,7 @@ const Checkout = () => {
       })),
       shippingAddress: { ...formData },
       paymentMethod: payment,
+      couponCode: coupon?.code || undefined,
     }
 
     try {
@@ -256,11 +283,47 @@ const Checkout = () => {
                 ))}
               </div>
 
+              {/* ====== Coupon ====== */}
+              <div className="py-5 border-t border-dark-border">
+                {coupon ? (
+                  <div className="flex items-center justify-between bg-primary/10 border border-primary/30 rounded-[8px] px-3 py-2.5">
+                    <span className="text-[12px] font-ui text-primary tracking-wide">
+                      {coupon.code} applied {coupon.freeShipping ? '· free shipping' : `· −${formatPrice(coupon.discount)}`}
+                    </span>
+                    <button type="button" onClick={removeCoupon} className="text-[11px] font-ui text-cream-muted hover:text-red-400 transition-colors cursor-pointer">Remove</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      placeholder="Discount code"
+                      className="flex-1 bg-dark-card border border-dark-border text-cream placeholder:text-cream-muted/40 px-4 py-2.5 text-[13px] font-body rounded-[8px] outline-none focus:border-primary transition-colors uppercase"
+                    />
+                    <button
+                      type="button"
+                      onClick={applyCoupon}
+                      disabled={applying || !couponInput.trim()}
+                      className="px-5 py-2.5 border border-dark-border text-cream text-[11px] font-ui tracking-[0.15em] rounded-[8px] hover:border-primary hover:text-primary transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {applying ? '…' : 'APPLY'}
+                    </button>
+                  </div>
+                )}
+                {couponMsg && <p className={`text-[11px] font-body mt-2 ${coupon ? 'text-primary' : 'text-red-400'}`}>{couponMsg}</p>}
+              </div>
+
               <div className="space-y-3 py-5 border-t border-dark-border">
                 <div className="flex items-center justify-between text-[13px] font-body">
                   <span className="text-cream-muted">Subtotal</span>
                   <span className="text-cream font-medium">{formatPrice(subtotal)}</span>
                 </div>
+                {discount > 0 && (
+                  <div className="flex items-center justify-between text-[13px] font-body">
+                    <span className="text-cream-muted">Discount</span>
+                    <span className="text-primary font-medium">−{formatPrice(discount)}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between text-[13px] font-body">
                   <span className="text-cream-muted">Shipping</span>
                   <span className="text-cream font-medium">{shipping === 0 ? 'Free' : formatPrice(shipping)}</span>

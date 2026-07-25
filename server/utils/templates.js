@@ -144,4 +144,24 @@ const orderConfirmTemp = (order) => {
   </div>`
 }
 
-module.exports = { emailTemp, resetPassTemp, orderConfirmTemp }
+const digestTemp = (body) => {
+  const html = String(body || '')
+    .split('\n')
+    .map((line) => (line.trim() ? `<p style="margin:0 0 8px;color:#374151;font-size:14px;line-height:1.6;">${line}</p>` : '<div style="height:6px"></div>'))
+    .join('')
+  return `
+  <div style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;background:#f3f4f6;padding:24px;">
+    <div style="background:#111827;padding:24px;border-radius:12px 12px 0 0;text-align:center;">
+      <h1 style="color:#C9A96E;margin:0;font-size:20px;letter-spacing:3px;">KAZIR NATION</h1>
+      <p style="color:#9ca3af;margin:6px 0 0;font-size:12px;letter-spacing:2px;text-transform:uppercase;">Business Digest</p>
+    </div>
+    <div style="background:#ffffff;padding:26px;border-radius:0 0 12px 12px;">
+      ${html}
+    </div>
+    <p style="text-align:center;color:#9ca3af;font-size:11px;margin-top:14px;">
+      © ${new Date().getFullYear()} KAZIR NATION · Generated automatically from your store data.
+    </p>
+  </div>`
+}
+
+module.exports = { emailTemp, resetPassTemp, orderConfirmTemp, digestTemp }

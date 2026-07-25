@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { FiCalendar, FiMoreHorizontal } from 'react-icons/fi'
 import toast from 'react-hot-toast'
-import { ordersOverview, statusColor } from '../../data/dashboardData'
-import { dashboardServices } from '../../api'
+import { Link } from 'react-router'
+import { statusColor } from '../../data/dashboardData'
+import { dashboardServices, agentServices } from '../../api'
 import { useAuth } from '../../context/AuthContext'
 import { icons } from '../../components/admin/adminIcons'
 import StatCard from '../../components/admin/StatCard'
@@ -13,6 +14,7 @@ import AgentAssistant from '../../components/admin/AgentAssistant'
 
 // Small tone → colour map for inventory rows
 const toneColor = { warning: '#C9A96E', danger: '#f87171', success: '#4ade80', muted: '#8A8278' }
+const sevColor = { high: '#f87171', medium: '#C9A96E', low: '#4ade80' }
 
 const money = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}`
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '—')
@@ -22,16 +24,22 @@ const Dashboard = () => {
   const { user } = useAuth()
   const [overview, setOverview] = useState(null)
   const [analytics, setAnalytics] = useState(null)
+  const [insights, setInsights] = useState([])
   const [loading, setLoading] = useState(true)
   const firstName = (user?.fullName || 'there').split(' ')[0]
 
-  // ====== Load live aggregates (overview + analytics)
+  // ====== Load live aggregates (overview + analytics + AI insights)
   useEffect(() => {
     const load = async () => {
       try {
-        const [ov, an] = await Promise.all([dashboardServices.getOverview(), dashboardServices.getAnalytics()])
+        const [ov, an, ins] = await Promise.all([
+          dashboardServices.getOverview(),
+          dashboardServices.getAnalytics(),
+          agentServices.getInsights().catch(() => ({ insights: [] })),
+        ])
         setOverview(ov?.overview || null)
         setAnalytics(an?.analytics || null)
+        setInsights(ins?.insights || [])
       } catch (err) {
         console.log(err)
         toast.error(err?.response?.data?.message || 'Failed to load dashboard')
@@ -76,6 +84,14 @@ const Dashboard = () => {
   const topSelling = overview?.topSelling || []
   const maxSold = Math.max(1, ...topSelling.map((t) => t.sold || 0))
 
+  // ---- Orders-by-status donut (live)
+  const STATUS_COLORS = { pending: '#60a5fa', paid: '#34d399', processing: '#C9A96E', shipped: '#8b5cf6', delivered: '#4ade80', cancelled: '#f87171' }
+  const obs = overview?.ordersByStatus || {}
+  const statusTotal = Object.values(obs).reduce((s, n) => s + n, 0) || 1
+  const statusSegments = Object.entries(obs)
+    .filter(([, c]) => c > 0)
+    .map(([status, count]) => ({ label: cap(status), count, pct: Math.round((count / statusTotal) * 100), color: STATUS_COLORS[status] || '#8A8278' }))
+
   // ---- Charts (live analytics)
   const rev = analytics?.revenue || { labels: [], revenueSeries: [] }
   const cats = analytics?.salesByCategory || []
@@ -113,6 +129,31 @@ const Dashboard = () => {
           <StatCard key={stat.key} stat={stat} index={i} />
         ))}
       </div>
+
+      {/* ====== AI Alerts strip ====== */}
+      {insights.length > 0 && (
+        <div className="bg-dark-secondary border border-dark-border rounded-[18px] p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-[13px] font-ui tracking-[0.15em] text-cream font-semibold uppercase flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" /> AI Alerts
+            </h3>
+            <Link to="/admin/agents" className="text-[11px] font-ui tracking-wide text-primary hover:text-primary-light transition-colors cursor-pointer">
+              Ask the assistant →
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {insights.slice(0, 6).map((it, i) => (
+              <div key={i} className="flex items-start gap-2.5 bg-dark-card border border-dark-border rounded-[10px] px-3 py-2.5">
+                <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background: sevColor[it.severity] || '#8A8278' }} />
+                <p className="text-[12.5px] font-body text-cream leading-snug">
+                  <span className="text-cream-muted/60 uppercase text-[10px] font-ui mr-1.5">{it.category}</span>
+                  {it.message}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ====== Revenue + Sales by Channel (visual — static trend) ====== */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -152,20 +193,25 @@ const Dashboard = () => {
 
       {/* ====== Orders / Inventory / Financial ====== */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Orders overview (static donut) */}
+        {/* Orders overview (live from ordersByStatus) */}
         <Panel title="Orders Overview" viewAll>
-          <div className="flex items-center gap-6">
-            <DonutChart segments={ordersOverview.segments} centerValue={Number(k.totalOrders || 0).toLocaleString()} centerLabel="Total Orders" size={150} />
-            <div className="flex-1 space-y-3">
-              {ordersOverview.segments.map((s) => (
-                <div key={s.label} className="flex items-center gap-2.5 text-[12px]">
-                  <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
-                  <span className="flex-1 font-body text-cream-muted">{s.label}</span>
-                  <span className="font-ui text-cream-muted">{s.pct}%</span>
-                </div>
-              ))}
+          {statusSegments.length === 0 ? (
+            <p className="text-[13px] font-body text-cream-muted py-10 text-center">No orders yet.</p>
+          ) : (
+            <div className="flex items-center gap-6">
+              <DonutChart segments={statusSegments} centerValue={Number(k.totalOrders || 0).toLocaleString()} centerLabel="Total Orders" size={150} />
+              <div className="flex-1 space-y-3">
+                {statusSegments.map((s) => (
+                  <div key={s.label} className="flex items-center gap-2.5 text-[12px]">
+                    <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+                    <span className="flex-1 font-body text-cream-muted">{s.label}</span>
+                    <span className="font-ui text-cream-muted">{s.pct}%</span>
+                    <span className="font-body text-cream font-medium w-8 text-right">{s.count}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </Panel>
 
         {/* Inventory status (live) */}

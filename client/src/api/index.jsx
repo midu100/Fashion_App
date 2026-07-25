@@ -182,6 +182,46 @@ export const dashboardServices = {
     const res = await api.get('/dashboard/customers')
     return res.data
   },
+  getMarketing: async () => {
+    const res = await api.get('/dashboard/marketing')
+    return res.data
+  },
+  getReport: async (type) => {
+    const res = await api.get(`/dashboard/report/${type}`)
+    return res.data
+  },
+  getSettings: async () => {
+    const res = await api.get('/dashboard/settings')
+    return res.data
+  },
+  updateSettings: async (payload) => {
+    const res = await api.put('/dashboard/settings', payload)
+    return res.data
+  },
+}
+
+// ====== Coupon services ======
+export const couponServices = {
+  validate: async (payload) => {
+    const res = await api.post('/coupon/validate', payload)
+    return res.data
+  },
+  getAll: async () => {
+    const res = await api.get('/coupon/all')
+    return res.data
+  },
+  create: async (payload) => {
+    const res = await api.post('/coupon/create', payload)
+    return res.data
+  },
+  update: async (id, payload) => {
+    const res = await api.put(`/coupon/update/${id}`, payload)
+    return res.data
+  },
+  remove: async (id) => {
+    const res = await api.delete(`/coupon/delete/${id}`)
+    return res.data
+  },
 }
 
 // ====== Wishlist services ======
@@ -220,6 +260,10 @@ export const newsletterServices = {
 export const agentServices = {
   getSuggestions: async () => {
     const res = await api.get('/agent/suggestions')
+    return res.data
+  },
+  getInsights: async () => {
+    const res = await api.get('/agent/insights')
     return res.data
   },
   query: async (payload) => {

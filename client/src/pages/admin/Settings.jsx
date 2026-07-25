@@ -1,4 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import toast from 'react-hot-toast'
+import { dashboardServices } from '../../api'
 import PageHeader from '../../components/admin/PageHeader'
 import Panel from '../../components/admin/Panel'
 import ProfileForm from '../../components/ProfileForm'
@@ -18,11 +20,42 @@ const Toggle = ({ on, onClick }) => (
 )
 
 const Settings = () => {
-  const [store, setStore] = useState({ name: 'KAZIR NATION', email: 'hello@kazirnation.com', currency: 'USD ($)', country: 'Bangladesh' })
+  const [store, setStore] = useState({ storeName: '', supportEmail: '', currency: '', country: '', freeShippingThreshold: '', shippingFee: '', lowStockThreshold: '' })
+  const [saving, setSaving] = useState(false)
   const [prefs, setPrefs] = useState({ orderEmails: true, lowStockAlerts: true, marketing: false, weeklyReport: true })
+
+  // ====== Load persisted store settings
+  useEffect(() => {
+    dashboardServices
+      .getSettings()
+      .then((res) => { if (res?.settings) setStore((p) => ({ ...p, ...res.settings })) })
+      .catch((err) => console.log(err))
+  }, [])
 
   const onStore = (e) => setStore((p) => ({ ...p, [e.target.name]: e.target.value }))
   const toggle = (key) => setPrefs((p) => ({ ...p, [key]: !p[key] }))
+
+  // ====== Save store settings
+  const saveStore = async () => {
+    try {
+      setSaving(true)
+      const res = await dashboardServices.updateSettings({
+        storeName: store.storeName,
+        supportEmail: store.supportEmail,
+        currency: store.currency,
+        country: store.country,
+        freeShippingThreshold: Number(store.freeShippingThreshold) || 0,
+        shippingFee: Number(store.shippingFee) || 0,
+        lowStockThreshold: Number(store.lowStockThreshold) || 10,
+      })
+      toast.success(res?.message || 'Saved', { position: 'top-center' })
+    } catch (err) {
+      console.log(err)
+      toast.error('Could not save settings', { position: 'top-center' })
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const prefRows = [
     { key: 'orderEmails', label: 'Order confirmation emails', desc: 'Send an email on every new order' },
@@ -40,16 +73,16 @@ const Settings = () => {
         <ProfileForm />
       </Panel>
 
-      {/* Store details */}
+      {/* Store details (persisted) */}
       <Panel title="Store Details">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={labelClass}>Store Name</label>
-            <input name="name" value={store.name} onChange={onStore} className={inputClass} />
+            <input name="storeName" value={store.storeName} onChange={onStore} className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Support Email</label>
-            <input name="email" value={store.email} onChange={onStore} className={inputClass} />
+            <input name="supportEmail" value={store.supportEmail} onChange={onStore} className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Currency</label>
@@ -59,10 +92,22 @@ const Settings = () => {
             <label className={labelClass}>Country</label>
             <input name="country" value={store.country} onChange={onStore} className={inputClass} />
           </div>
+          <div>
+            <label className={labelClass}>Free shipping over ($)</label>
+            <input name="freeShippingThreshold" type="number" value={store.freeShippingThreshold} onChange={onStore} className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>Shipping fee ($)</label>
+            <input name="shippingFee" type="number" value={store.shippingFee} onChange={onStore} className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>Low-stock threshold</label>
+            <input name="lowStockThreshold" type="number" value={store.lowStockThreshold} onChange={onStore} className={inputClass} />
+          </div>
         </div>
         <div className="flex justify-end mt-5">
-          <button className="bg-primary text-dark text-[12px] font-ui tracking-[0.15em] font-semibold px-6 py-2.5 rounded-[10px] hover:bg-primary-light transition-colors cursor-pointer active:scale-95">
-            Save Changes
+          <button onClick={saveStore} disabled={saving} className="bg-primary text-dark text-[12px] font-ui tracking-[0.15em] font-semibold px-6 py-2.5 rounded-[10px] hover:bg-primary-light transition-colors cursor-pointer active:scale-95 disabled:opacity-60">
+            {saving ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
       </Panel>
