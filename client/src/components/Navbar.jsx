@@ -9,7 +9,14 @@ import { useFlyToCart, CART_TARGET_ID } from '../context/FlyToCartContext'
 import { useAuth } from '../context/AuthContext'
 import Avatar from './common/Avatar'
 
-const navLinks = ['MEN', 'WOMEN', 'COLLECTIONS', 'LOOKBOOK', 'JOURNAL', 'ABOUT']
+const navLinks = [
+  { label: 'MEN', to: '/shop' },
+  { label: 'WOMEN', to: '/shop' },
+  { label: 'COLLECTIONS', to: '/shop' },
+  { label: 'LOOKBOOK', to: '/lookbook' },
+  { label: 'JOURNAL', to: '/journal' },
+  { label: 'ABOUT', to: '/about' },
+]
 
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false)
@@ -75,11 +82,11 @@ const Navbar = () => {
             <div className="hidden lg:flex items-center gap-9">
               {navLinks.map((link) => (
                 <Link
-                  key={link}
-                  to="/shop"
+                  key={link.label}
+                  to={link.to}
                   className="text-cream-muted hover:text-primary text-[13px] font-ui tracking-[0.22em] font-semibold transition-colors duration-300 link-hover"
                 >
-                  {link}
+                  {link.label}
                 </Link>
               ))}
             </div>
@@ -187,24 +194,69 @@ const Navbar = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3, ease: 'easeOut' }}
-            className="fixed inset-0 z-40 bg-dark/98 backdrop-blur-xl flex flex-col items-center justify-center gap-8 lg:hidden"
+            className="fixed inset-0 z-40 bg-dark/98 backdrop-blur-xl flex flex-col items-center justify-center gap-6 lg:hidden overflow-y-auto py-24"
           >
             {navLinks.map((link, i) => (
               <motion.div
-                key={link}
+                key={link.label}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.08, duration: 0.4 }}
+                transition={{ delay: i * 0.06, duration: 0.4 }}
               >
                 <Link
-                  to="/shop"
+                  to={link.to}
                   className="text-cream text-[22px] font-ui tracking-[0.3em] font-semibold hover:text-primary transition-colors duration-300"
                   onClick={() => setMobileOpen(false)}
                 >
-                  {link}
+                  {link.label}
                 </Link>
               </motion.div>
             ))}
+
+            {/* ====== Account + quick links (mobile) ====== */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: navLinks.length * 0.06 + 0.05, duration: 0.4 }}
+              className="mt-4 pt-7 border-t border-dark-border/70 w-56 flex flex-col items-center gap-5"
+            >
+              {!isAuthenticated ? (
+                <Link
+                  to="/signin"
+                  onClick={() => setMobileOpen(false)}
+                  className="inline-flex items-center gap-2.5 bg-primary text-dark px-10 py-3.5 text-[12px] font-ui tracking-[0.2em] font-semibold rounded-full hover:bg-primary-light transition-colors active:scale-95"
+                >
+                  <FiUser size={16} /> SIGN IN
+                </Link>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3">
+                    <Avatar src={user?.avatar} name={user?.fullName} size={40} />
+                    <div className="text-left">
+                      <p className="text-[13px] font-ui text-cream font-semibold">{user?.fullName || 'Account'}</p>
+                      <p className="text-[11px] font-body text-cream-muted">{user?.email}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center gap-4 text-[13px] font-ui tracking-[0.2em] text-cream-muted">
+                    <Link to="/profile" onClick={() => setMobileOpen(false)} className="hover:text-primary transition-colors">PROFILE</Link>
+                    <Link to="/my-orders" onClick={() => setMobileOpen(false)} className="hover:text-primary transition-colors">MY ORDERS</Link>
+                    {isAdmin && <Link to="/admin" onClick={() => setMobileOpen(false)} className="hover:text-primary transition-colors">DASHBOARD</Link>}
+                    <button onClick={() => { setMobileOpen(false); handleLogout() }} className="text-red-400 hover:text-red-300 transition-colors tracking-[0.2em] cursor-pointer">SIGN OUT</button>
+                  </div>
+                </>
+              )}
+
+              <div className="flex items-center gap-8 pt-2">
+                <Link to="/wishlist" onClick={() => setMobileOpen(false)} className="flex flex-col items-center gap-1 text-cream-muted hover:text-primary transition-colors">
+                  <FiHeart size={19} />
+                  <span className="text-[9px] font-ui tracking-[0.15em]">WISHLIST {wishlistCount > 0 ? `(${wishlistCount})` : ''}</span>
+                </Link>
+                <Link to="/cart" onClick={() => setMobileOpen(false)} className="flex flex-col items-center gap-1 text-cream-muted hover:text-primary transition-colors">
+                  <FiShoppingBag size={19} />
+                  <span className="text-[9px] font-ui tracking-[0.15em]">BAG {cartCount > 0 ? `(${cartCount})` : ''}</span>
+                </Link>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

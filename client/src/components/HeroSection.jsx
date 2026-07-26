@@ -37,16 +37,21 @@ const HeroSection = () => {
   const videoRef = useRef(null)
   const sectionRef = useRef(null)
 
-  // ====== Subtle scroll-out: gentle zoom + fade (not aggressive)
+  // ====== Subtle scroll-out: gentle fade only (NO zoom) ======
   const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start start', 'end start'] })
-  const bgScale = useTransform(scrollYProgress, [0, 1], [1, 1.15])
-  const bgOpacity = useTransform(scrollYProgress, [0, 0.85], [1, 0.35])
+  const bgOpacity = useTransform(scrollYProgress, [0, 0.85], [1, 0.4])
   const contentY = useTransform(scrollYProgress, [0, 1], [0, 80])
   const contentOpacity = useTransform(scrollYProgress, [0, 0.55], [1, 0])
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.playbackRate = 0.7
   }, [])
+
+  // ====== Seamless loop — restart from 0 without any zoom/jump (belt & suspenders for mobile)
+  const handleEnded = (e) => {
+    e.currentTarget.currentTime = 0
+    e.currentTarget.play().catch(() => {})
+  }
 
   useEffect(() => {
     const t = setInterval(() => setActive((p) => (p + 1) % slides.length), 6500)
@@ -57,8 +62,8 @@ const HeroSection = () => {
 
   return (
     <section ref={sectionRef} id="hero" className="relative w-full h-screen min-h-[600px] overflow-hidden bg-dark select-none">
-      {/* ====== Background video + gentle scroll zoom ====== */}
-      <motion.div style={{ scale: bgScale, opacity: bgOpacity }} className="absolute inset-0 z-[1] will-change-transform">
+      {/* ====== Background video (seamless loop, no zoom) + gentle scroll fade ====== */}
+      <motion.div style={{ opacity: bgOpacity }} className="absolute inset-0 z-[1]">
         <video
           ref={videoRef}
           src={heroVideo}
@@ -68,6 +73,7 @@ const HeroSection = () => {
           muted
           playsInline
           preload="auto"
+          onEnded={handleEnded}
           className="w-full h-full object-cover"
         />
         {/* Legibility overlays — clean, no busy blend layers */}

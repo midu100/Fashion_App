@@ -14,6 +14,9 @@ import Checkout from './pages/Checkout'
 import MyOrders from './pages/MyOrders'
 import TrackOrder from './pages/TrackOrder'
 import Profile from './pages/Profile'
+import Lookbook from './pages/Lookbook'
+import Journal from './pages/Journal'
+import About from './pages/About'
 import AuthLayout from './layout/AuthLayout'
 import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
@@ -68,6 +71,9 @@ const App = () => {
         <Route path="/" element={<LayoutOne />}>
           <Route index element={<Home />} />
           <Route path="shop" element={<Shop />} />
+          <Route path="lookbook" element={<Lookbook />} />
+          <Route path="journal" element={<Journal />} />
+          <Route path="about" element={<About />} />
           <Route path="product/:slug" element={<ProductDetails />} />
           <Route path="wishlist" element={<Wishlist />} />
           <Route path="cart" element={<Cart />} />
