@@ -2,8 +2,9 @@ import axios from 'axios'
 import { getCookie, getToken } from '../components/common/Services'
 
 // ====== Axios instance ======
+// Uses VITE_API_BASE_URL when set; falls back to the hosted Railway API.
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://fashionapp-production-39f0.up.railway.app',
   withCredentials: true, // sends the cookie too (same-site setups)
   headers: { 'Content-Type': 'application/json' },
 })

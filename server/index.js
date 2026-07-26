@@ -12,7 +12,7 @@ const port = process.env.PORT || 8000
 
 // ====== CORS — allow-list (CLIENT_URL may hold several comma-separated origins)
 // e.g. CLIENT_URL="https://fashion-app-rouge.vercel.app,http://localhost:5173"
-const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173,https://fashion-app-rouge.vercel.app')
   .split(',')
   .map((o) => o.trim().replace(/\/$/, '')) // strip trailing slash
   .filter(Boolean)
