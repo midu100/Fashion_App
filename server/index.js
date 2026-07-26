@@ -11,25 +11,26 @@ const app = express()
 const port = process.env.PORT || 8000
 
 // ====== CORS — allow-list ======
-// Known origins are ALWAYS allowed (so it works even if CLIENT_URL is misconfigured
-// on the host); any extra comma-separated origins in CLIENT_URL are merged in.
-const KNOWN_ORIGINS = ['http://localhost:5173', 'https://fashion-app-rouge.vercel.app']
+// Allows: any Vercel deployment of this project (production alias, git-branch &
+// preview URLs all end in .vercel.app), any localhost port, plus any explicit
+// origins from CLIENT_URL. Disallowed origins are cleanly blocked (never a 500).
 const envOrigins = (process.env.CLIENT_URL || '')
   .split(',')
   .map((o) => o.trim().replace(/\/$/, ''))
   .filter(Boolean)
-const allowedOrigins = [...new Set([...KNOWN_ORIGINS, ...envOrigins])]
+const staticAllow = new Set(['http://localhost:5173', 'https://fashion-app-rouge.vercel.app', ...envOrigins])
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // allow non-browser tools (no origin) and any allow-listed origin
-      if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ''))) return callback(null, true)
-      return callback(new Error(`Origin ${origin} not allowed by CORS`))
-    },
-    credentials: true,
-  })
-)
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true // non-browser tools (curl, server-to-server)
+  const clean = origin.replace(/\/$/, '')
+  return (
+    staticAllow.has(clean) ||
+    /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(clean) || // any Vercel deploy URL
+    /^http:\/\/localhost(:\d+)?$/i.test(clean)
+  )
+}
+
+app.use(cors({ origin: (origin, callback) => callback(null, isAllowedOrigin(origin)), credentials: true }))
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser())
