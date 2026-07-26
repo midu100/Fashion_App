@@ -2,6 +2,7 @@ import React from 'react'
 import { Link } from 'react-router'
 import { motion } from 'framer-motion'
 import { FiArrowRight } from 'react-icons/fi'
+import AnimatedNumber from '../components/common/AnimatedNumber'
 
 const stats = [
   { value: '2019', label: 'Founded in Dhaka' },
@@ -56,7 +57,7 @@ const About = () => {
         <div className="max-w-[1400px] mx-auto grid grid-cols-2 lg:grid-cols-4 gap-8 text-center">
           {stats.map((s) => (
             <div key={s.label}>
-              <p className="text-editorial text-[clamp(2rem,4vw,3.2rem)] text-primary">{s.value}</p>
+              <AnimatedNumber value={s.value} duration={2} className="text-editorial text-[clamp(2rem,4vw,3.2rem)] text-primary block" />
               <p className="text-[12px] font-ui tracking-[0.15em] text-cream-muted uppercase mt-2">{s.label}</p>
             </div>
           ))}
